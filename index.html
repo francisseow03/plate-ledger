@@ -13,7 +13,7 @@
 <link rel="apple-touch-icon" href="icon-180.png">
 <style>
 :root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
-body{margin:0}
+body{margin:0;overflow-x:hidden}
 img{max-width:100%}
 [hidden]{display:none!important}
 </style>
@@ -60,7 +60,8 @@ button{cursor:pointer}
 .datenav{display:flex;align-items:center;gap:4px}
 .iconbtn{width:38px;height:38px;border-radius:12px;border:1px solid var(--line);background:var(--surface);display:grid;place-items:center;font-size:18px;line-height:1}
 .iconbtn:disabled{opacity:.35;cursor:default}
-.stack{display:flex;flex-direction:column;gap:14px}
+.stack{display:flex;flex-direction:column;gap:14px;min-width:0}
+.stack > *{min-width:0;max-width:100%}
 .card{background:var(--surface);border-radius:20px;padding:18px;box-shadow:var(--shadow)}
 .card h2{font-family:var(--display);font-size:17px;font-weight:700;margin:0}
 .cardhead{display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin-bottom:12px}
@@ -138,13 +139,13 @@ textarea.input{min-height:84px;resize:vertical}
 
 /* sheet */
 .scrim{position:fixed;inset:0;background:rgba(10,16,13,.45);z-index:40;display:flex;align-items:flex-end;justify-content:center}
-.sheet{background:var(--bg);width:100%;max-width:560px;max-height:94%;overflow-y:auto;border-radius:24px 24px 0 0;padding:10px 16px calc(20px + env(safe-area-inset-bottom,0px));overscroll-behavior:contain}
+.sheet{background:var(--bg);width:100%;max-width:560px;max-height:94%;overflow-y:auto;overflow-x:hidden;border-radius:24px 24px 0 0;padding:10px 16px calc(20px + env(safe-area-inset-bottom,0px));overscroll-behavior:contain}
 .grab{width:40px;height:5px;border-radius:9px;background:var(--line);margin:4px auto 10px}
 .sheethead{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
-.photo{position:relative;border-radius:18px;overflow:hidden;background:var(--surface);border:1.5px dashed var(--line);min-height:150px;display:grid;place-items:center}
-.photo img{width:100%;max-height:300px;object-fit:cover;display:block}
+.photo{position:relative;display:block;width:100%;max-width:100%;border-radius:18px;overflow:hidden;background:var(--surface);border:1.5px dashed var(--line);min-height:150px}
+.photo img{display:block;width:100%;max-width:100%;height:auto;max-height:300px;object-fit:contain;background:var(--surface-2)}
 .photo .x{position:absolute;top:8px;right:8px;background:rgba(0,0,0,.55);color:#fff;border:0;border-radius:99px;width:34px;height:34px}
-.photobtns{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:16px;width:100%}
+.photobtns{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px;padding:16px;width:100%;min-height:150px;align-content:center}
 .vh{position:absolute;width:1px;height:1px;opacity:0;overflow:hidden;clip:rect(0 0 0 0);pointer-events:none}
 .chips{display:flex;flex-wrap:wrap;gap:8px}
 .chip{border:1px solid var(--line);background:var(--surface);border-radius:99px;padding:7px 12px;font-size:13px;font-weight:500;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -156,7 +157,7 @@ textarea.input{min-height:84px;resize:vertical}
 .item .top2 .input{flex:1;min-width:0;min-height:40px;font-weight:600}
 .nutgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
 .nutgrid .field label{font-size:11px}
-.nutgrid .input{min-height:38px;padding:6px 8px;font-size:15px}
+.nutgrid .input{min-height:38px;padding:6px 8px;font-size:16px;min-width:0}
 .totals{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;text-align:center;background:var(--surface);border-radius:16px;padding:12px 6px}
 .totals b{display:block;font-family:var(--display);font-size:20px}
 .totals span{font-size:11px;color:var(--muted);font-weight:600;letter-spacing:.04em;text-transform:uppercase}
@@ -958,20 +959,23 @@ async function takePhoto(file){
   }
   renderSheet();
 }
+// An <img> applies the photo's rotation tag in every current browser (Safari's createImageBitmap may not).
 async function loadBitmap(file){
-  if (window.createImageBitmap){
-    try { return await createImageBitmap(file, { imageOrientation:'from-image' }); } catch {}
+  try {
+    return await new Promise((res, rej) => {
+      const url = URL.createObjectURL(file); const img = new Image();
+      img.onload = () => { res(img); setTimeout(() => URL.revokeObjectURL(url), 1000); };
+      img.onerror = () => { URL.revokeObjectURL(url); rej(new Error('decode')); };
+      img.src = url;
+    });
+  } catch (e){
+    if (window.createImageBitmap) return await createImageBitmap(file, { imageOrientation:'from-image' });
+    throw e;
   }
-  return await new Promise((res, rej) => {
-    const url = URL.createObjectURL(file); const img = new Image();
-    img.onload = () => { res(img); setTimeout(() => URL.revokeObjectURL(url), 1000); };
-    img.onerror = () => { URL.revokeObjectURL(url); rej(new Error('decode')); };
-    img.src = url;
-  });
 }
 async function prepImage(file){
   const bmp = await loadBitmap(file);
-  const w0 = bmp.width, h0 = bmp.height;
+  const w0 = bmp.naturalWidth || bmp.width, h0 = bmp.naturalHeight || bmp.height;
   const draw = (max, square) => {
     const c = document.createElement('canvas');
     if (square){
