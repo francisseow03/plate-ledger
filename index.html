@@ -866,7 +866,7 @@ function renderSheet(){
         <textarea class="input" id="foodText" placeholder="e.g. nasi lemak with fried chicken wing and a teh tarik, large plate">${esc(A.text)}</textarea></div>
       ${mealSeg()}
       ${A.err ? `<div class="err">${esc(A.err)}</div>` : ''}
-      <button class="btn primary wide" id="analyzeBtn" ${A.busy ? 'disabled' : ''}>${A.busy ? '<span class="spinner"></span> Reading your meal… 10–40 s' : 'Analyze with AI'}</button>
+      <button class="btn primary wide" id="analyzeBtn" ${A.busy ? 'disabled' : ''}>${A.busy ? '<span class="spinner"></span> Reading your meal… up to 1 min' : 'Analyze with AI'}</button>
       ${A.busy ? `<button class="btn ghost wide" id="stopBtn">Cancel</button>` : `<button class="btn ghost wide" id="manualBtn">Enter numbers myself</button>`}
       ${recent.length && !A.busy ? `<div><div class="label" style="margin-bottom:8px">Log again</div><div class="chips">${recent.map(e => `<button class="chip" data-recent="${esc(e.id)}">${esc(e.name)} · ${r0(entryTotals(e).kcal)}</button>`).join('')}</div></div>` : ''}
     </div>`;
@@ -990,7 +990,7 @@ async function prepImage(file){
     }
     return c;
   };
-  const big = await new Promise(r => draw(1400, false).toBlob(r, 'image/jpeg', 0.85));
+  const big = await new Promise(r => draw(1280, false).toBlob(r, 'image/jpeg', 0.85));
   if (!big) throw new Error('encode');
   const thumb = draw(112, true).toDataURL('image/jpeg', 0.7);
   return { big, thumb };
@@ -1010,7 +1010,7 @@ async function analyze(){
   if (A.photo && !usePhoto && !text){ A.err = "This Claude app view can't send photos to the AI. Type what's in the photo (your photo stays as the entry picture), or open this page in Safari or Chrome."; renderSheet(); return; }
   A.busy = true; A.err = ''; A.ctl = new AbortController(); renderSheet();
   const prompt = `You are a careful nutrition analyst. Estimate the nutrition of one meal a person just ate, so they can log it.
-${usePhoto ? `The attached photo shows the meal. Identify each distinct food or drink, and estimate portion sizes from visual cues (plate and bowl size, utensils, hands). Include cooking oil, sauces and gravies you can see or that the dish normally contains.` : 'There is no photo; work from the description.'}
+${usePhoto ? `The attached photo shows the meal. Look over the whole photo, edges included, and identify each distinct food or drink. Estimate portion sizes from visual cues (plate and bowl size, utensils, hands, packaging). Include cooking oil, sauces and gravies you can see or that the dish normally contains. If a label, menu or packaging with nutrition facts is visible, use its numbers. If the photo is dark, blurry or partly hidden, still give your best estimate of the most likely dish and set confidence to "low" rather than returning nothing.` : 'There is no photo; work from the description.'}
 Person's description: ${text ? `"${text.slice(0, 1500)}"` : '(none)'}
 If the description gives quantities, brands or ingredients, trust it over the photo. Recognise regional and hawker dishes by their usual recipes and typical serving sizes. When unsure, estimate a typical serving rather than a small one.
 
@@ -1075,7 +1075,10 @@ async function call(op, body = {}, signal){
     if (e?.name === 'AbortError') throw { code:'cancelled', message:'Cancelled' };
     throw { code:'offline', message:"Can't reach the server. Check your internet connection." };
   }
-  const d = await r.json().catch(() => ({ error:{ code:'server', message:'The server sent a bad response. Try again.' } }));
+  const d = await r.json().catch(() => ({}));
+  if (!d.error && !r.ok) d.error = r.status === 546 || r.status === 504
+    ? { code:'busy', message:"Google's AI took too long. Your photo is kept: tap Analyze to try again." }
+    : { code:'server', message:'The server sent a bad response. Try again.' };
   if (d.error){
     if (d.error.code === 'bad_pin' && op !== 'login') showLock('login', 'Your passcode changed or expired. Enter it again.');
     throw d.error;
